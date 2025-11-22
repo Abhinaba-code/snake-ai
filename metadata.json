@@ -1,0 +1,5 @@
+{
+  "name": "AutoSnake AI",
+  "description": "A fully automated self-playing Snake game featuring a smart pathfinding algorithm and Gemini-powered commentary.",
+  "requestFramePermissions": []
+}
