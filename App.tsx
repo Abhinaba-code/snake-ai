@@ -5,10 +5,11 @@ import { Direction, GameStatus, Point, Commentary } from './types';
 import { BOARD_WIDTH, BOARD_HEIGHT, SPEED_LEVELS } from './constants';
 import { getNextAutoMove } from './utils/pathfinding';
 import { generateGameCommentary, checkApiKey } from './services/geminiService';
+import { playEatSound, playGameOverSound, playStartSound, setMuted } from './utils/sound';
 import { 
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, 
   Play, Ban, Bot, Gamepad2, Gauge, 
-  Sun, Moon, Zap, Trophy, User
+  Sun, Moon, Zap, Trophy, User, Volume2, VolumeX
 } from 'lucide-react';
 
 // Initial State Helpers
@@ -45,6 +46,7 @@ const App: React.FC = () => {
   const [comments, setComments] = useState<Commentary[]>([]);
   const [speed, setSpeed] = useState(SPEED_LEVELS['Normal']);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [isMuted, setIsMuted] = useState(false);
 
   // Refs
   const directionRef = useRef(Direction.UP);
@@ -63,7 +65,16 @@ const App: React.FC = () => {
     addComment(text, 'ai');
   }, [score, highScore, addComment]);
 
+  const toggleMute = () => {
+    setIsMuted(prev => {
+      const next = !prev;
+      setMuted(next);
+      return next;
+    });
+  };
+
   const startGame = useCallback(() => {
+    playStartSound();
     setSnake(getInitialSnake());
     setDirection(Direction.UP);
     directionRef.current = Direction.UP;
@@ -79,7 +90,16 @@ const App: React.FC = () => {
   // Auto-start on load
   useEffect(() => {
     const timer = setTimeout(() => {
-       startGame();
+       // Silent start on load to avoid jarring sound before interaction
+       setSnake(getInitialSnake());
+       setDirection(Direction.UP);
+       directionRef.current = Direction.UP;
+       setScore(0);
+       setStatus(GameStatus.PLAYING);
+       setFood(getRandomFood(getInitialSnake())); 
+       setComments([]);
+       addComment(`Game Started. Mode: ${isAutoMode ? 'Auto-Pilot' : 'Manual'}`);
+       triggerAIComment('START');
     }, 100);
     return () => clearTimeout(timer);
   }, []);
@@ -143,6 +163,7 @@ const App: React.FC = () => {
           setDirection(autoDir);
         } else {
           setStatus(GameStatus.GAME_OVER);
+          playGameOverSound();
           addComment("Auto-Pilot trapped!", "failure");
           triggerAIComment('GAME_OVER');
           return prevSnake;
@@ -159,6 +180,7 @@ const App: React.FC = () => {
       // Wall Collision
       if (nextHead.x < 0 || nextHead.x >= BOARD_WIDTH || nextHead.y < 0 || nextHead.y >= BOARD_HEIGHT) {
         setStatus(GameStatus.GAME_OVER);
+        playGameOverSound();
         addComment("Hit the wall!", "failure");
         triggerAIComment('GAME_OVER');
         return prevSnake;
@@ -172,6 +194,7 @@ const App: React.FC = () => {
 
       if (isSelfCollision) {
         setStatus(GameStatus.GAME_OVER);
+        playGameOverSound();
         addComment("Ouch! Self collision.", "failure");
         triggerAIComment('GAME_OVER');
         return prevSnake;
@@ -180,6 +203,7 @@ const App: React.FC = () => {
       const newSnake = [nextHead, ...prevSnake];
 
       if (nextHead.x === food.x && nextHead.y === food.y) {
+        playEatSound();
         setScore(s => {
           const newScore = s + 10;
           if (newScore % 50 === 0) triggerAIComment('MILESTONE');
@@ -255,12 +279,22 @@ const App: React.FC = () => {
              </div>
           </div>
 
-          <button 
-            onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-yellow-400' : 'bg-slate-200 hover:bg-slate-300 text-slate-600'}`}
-          >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={toggleMute}
+              className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-200 hover:bg-slate-300 text-slate-600'}`}
+              title={isMuted ? "Unmute" : "Mute"}
+            >
+              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+
+            <button 
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-yellow-400' : 'bg-slate-200 hover:bg-slate-300 text-slate-600'}`}
+            >
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
 

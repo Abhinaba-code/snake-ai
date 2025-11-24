@@ -3,6 +3,7 @@ import { GEMINI_MODEL } from "../constants";
 
 let ai: GoogleGenAI | null = null;
 let isRateLimited = false;
+let isQuotaExceeded = false; // Permanently disable if quota is hit
 let rateLimitResetTime = 0;
 
 // Safely access process.env to prevent crashes in browser environments
@@ -42,9 +43,10 @@ export const generateGameCommentary = async (
   highScore: number, 
   event: 'START' | 'GAME_OVER' | 'MILESTONE'
 ): Promise<string> => {
-  if (!ai) return "AI Commentator is offline.";
+  // If AI is not initialized or Quota is exceeded, use fallback immediately
+  if (!ai || isQuotaExceeded) return getFallbackCommentary(event, score);
 
-  // Circuit Breaker: If rate limited, use fallback immediately to avoid API calls
+  // Circuit Breaker: If rate limited (temporary), use fallback
   if (isRateLimited) {
     if (Date.now() > rateLimitResetTime) {
       isRateLimited = false; // Reset cooldown
@@ -77,16 +79,19 @@ export const generateGameCommentary = async (
     });
     return response.text || getFallbackCommentary(event, score);
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-
+    // Silently handle errors to prevent console spam
+    const errorString = JSON.stringify(error) || "";
+    
     // Detect 429 Resource Exhausted or similar quota errors
-    const errorString = JSON.stringify(error);
     if (
       errorString.includes("429") || 
       errorString.includes("RESOURCE_EXHAUSTED") || 
       errorString.includes("quota")
     ) {
-      console.warn("Gemini API Rate Limit Hit. Activating cooldown for 60 seconds.");
+      console.warn("Gemini API Quota Exceeded. Disabling AI commentary for this session.");
+      isQuotaExceeded = true; // Permanently disable for this session
+    } else {
+      console.warn("Gemini API Error (Temporary). applying cooldown.", error);
       isRateLimited = true;
       rateLimitResetTime = Date.now() + 60000; // 60 second cooldown
     }
